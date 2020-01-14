@@ -1,0 +1,4 @@
+
+The @tensorflow/tfjs-node version MUST be 1.2.11, or there will be issues with node version 10.x or 12.x
+
+yarn add @tensorflow/tfjs-node@1.2.11
