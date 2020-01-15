@@ -1,0 +1,50 @@
+
+[1]
+Dataset read from file with let carsData = tf.data.csv(fileUrl, csvConfig)
+{ xs: { km: 135000, fuel: 'Diesel', age: 8 }, ys: { price: 9700 } }
+{ xs: { km: 155000, fuel: 'Diesel', age: 7 }, ys: { price: 7500 } }
+{ xs: { km: 9000, fuel: 'Diesel', age: 2 }, ys: { price: 27000 } }
+{ xs: { km: 149000, fuel: 'Diesel', age: 10 }, ys: { price: 7000 } }
+{ xs: { km: 233000, fuel: 'Diesel', age: 12 }, ys: { price: 4600 } }
+...
+Because we have specified the label column with:
+    columnConfigs: {
+        price: {
+            isLabel: true
+        }
+    }
+
+
+[2]
+Dataset after flattenedDataset = carsData.map(({...
+The xs and ys have changed from objects to arrays.
+
+{ xs: [ 135000, 'Diesel', 8 ], ys: [ 9700 ] }
+{ xs: [ 155000, 'Diesel', 7 ], ys: [ 7500 ] }
+{ xs: [ 9000, 'Diesel', 2 ], ys: [ 27000 ] }
+{ xs: [ 149000, 'Diesel', 10 ], ys: [ 7000 ] }
+{ xs: [ 233000, 'Diesel', 12 ], ys: [ 4600 ] }
+
+
+[3] Separate ys form xs and convert dataset to arrays with:
+inputs = await data.map(d => d.xs).toArray() and labels = await data.map(d => d.ys).toArray()
+
+inputs:
+[
+  [ 135000, 'Diesel', 8 ],
+  [ 155000, 'Diesel', 7 ],
+  [ 9000, 'Diesel', 2 ],
+  [ 149000, 'Diesel', 10 ],
+  [ 233000, 'Diesel', 12 ],
+  ...
+]
+
+labels:
+[
+    [ 9700 ],
+    [ 7500 ],
+    [ 27000 ],
+    [ 7000 ],
+    [ 4600 ],
+    ...
+]
