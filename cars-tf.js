@@ -26,9 +26,9 @@ async function run() {
 
     // show(values.length);
     // Convert the data to a form we can use for training.
-    const tensorData = prepareData (data);
-    // const {labels} = tensorData;
-    // await labels.forEachAsync(e => console.log(e));
+    let [labels, inputs] = await prepareData (data);
+    inputs.print();
+    labels.print();
 
 }
 
@@ -45,22 +45,22 @@ async function prepareData (data){
         const inputs = await data.map(d => d.xs).toArray();
         const labels = await data.map(d => d.ys).toArray();
 
-        // inputs.map((x) => {x[1] = (x[1] == 'Diesel')? -1 : 1});
+        //Normalize fuel before converting to tensor to get rid of string values
         normalizeFuel(inputs);
-        normalizeInputs(inputs);
-        // console.log(inputs);
-
 
         // See comments.txt [4]
-        const inputTensor = tf.tensor2d(inputs, [inputs.length, 3]);
-        const labelTensor = tf.tensor2d(labels, [labels.length, 1]);
-        // inputTensor.print();
-        // await labels.forEachAsync(e => console.log(e));
-        // console.log(labels);
-        // inputTensor.print();
-        return {
-            labels: labelTensor,
-        };
+        let inputTensor = tf.tensor2d(inputs);
+
+        let normalizedInputs = tf.tidy(() => normalizeInputs(inputTensor));
+        // normalizedInputs.print();
+
+        let labelTensor = tf.tensor2d(labels, [labels.length, 1]);
+        let normalizedLabels = normalizeLabels(labelTensor);
+        // normalizedLabels.print();
+
+
+        return [normalizedLabels, normalizedInputs];
+
   // });
 }
 
@@ -103,12 +103,31 @@ function normalizeFuel(array){
     array.map((x) => {x[1] = (x[1] == 'Diesel')? -1 : 1});
 }
 
-function normalizeInputs(array){
-    // max_km = tf.maximum();
-    min_km;
-    max_age;
-    min_age;
-    show(array[0]);
-    // var col1 = array[0].map(function(value,index) { return value[0]; });
-    // show(col1);
+function normalizeInputs(inputTensor){
+    // Split into 3 separate tensors - one of each input feature
+    let [km, fuel, age] = tf.split(inputTensor, 3, 1); // split on axis=1 i.e. vertically
+    //Find min and max of 1st and 3rd tensors
+    max_km = km.max();
+    min_km = km.min();
+    max_age = age.max();
+    min_age = age.min();
+
+    //Normalize 1st and 3rd tensors
+    let normalizedKm = km.sub(min_km).div(max_km.sub(min_km)); // (value - min) / (max - min)
+    let normalizedAge = age.sub(min_age).div(max_age.sub(min_age)); // (value - min) / (max - min)
+
+    //Concatenate again the three tensors according to dimension 1 ("vertically")
+    let normalizedInputTensor = tf.concat([normalizedKm, fuel, normalizedAge ], 1);
+    // normalizedInputTensor.print();
+    return normalizedInputTensor;
+
+}
+
+function normalizeLabels(labelTensor){
+    max_price = labelTensor.max();
+    min_price = labelTensor.min();
+
+    let normalizedLabelTensor = labelTensor.sub(min_price).div(max_price.sub(min_price)); // (value - min) / (max - min)
+
+    return normalizedLabelTensor;
 }
