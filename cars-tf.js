@@ -24,44 +24,156 @@ run();
 async function run() {
     const data = await getData();
 
+    // await data.forEachAsync(e => console.log(e));
+
     // show(values.length);
     // Convert the data to a form we can use for training.
-    let [labels, inputs] = await prepareData (data);
-    inputs.print();
-    labels.print();
+    let [trainingInputs, trainingLabels, testingInputs, testingLabels] = await prepareData (data);
+    // inputs.print();
+    // labels.print();
+    let model = createModel();
+    model.summary();
+    //
+    result = await trainModel(model, trainingInputs, trainingLabels);
+    // console.log(result);
 
+    testModel(model, testingInputs, testingLabels);
+}
+
+function createModel() {
+  // Create a sequential model
+  const model = tf.sequential();
+
+  // Add a single hidden layer with 10 nodes, expecting 3 inputs and having bias
+  model.add(tf.layers.dense({inputShape: [3], units: 10, useBias: true}));
+
+  // Add an output layer with bias
+  model.add(tf.layers.dense({units: 1, useBias: true}));
+
+  const loss = "meanSquaredError"; // Selected loss function: Mean Squared Error (because the data will be normalized )
+
+  //Optimizer which is going to find minimum loss
+  /* const optimizer = tf.train.sgd(0.1); // Selected optimizer: Stochastic Gradient Descent with learning rate 0.1 */
+  const optimizer = tf.train.adam(); // Preferred optimizer: the most recently developed and the most efficient
+
+  //// Compile model //// (necessary before training)
+  model.compile ({
+      loss: loss,
+      optimizer,
+  });
+
+  return model;
+}
+
+
+function trainModel(model, trainingInputTensor, trainingLabelTensor){
+
+
+
+    var t0, t1; // Time holders
+
+    //Training method: fit (returns a promise)
+    return model.fit (trainingInputTensor, trainingLabelTensor,{
+        batchsize: 32, // Number of samples per gradient update
+        epochs: 10, //larger number of iterations on a non-linear model
+        validationSplit: 0.2, // fraction of the training data to be used as validation data.
+                              // The model will set apart this fraction of the training data, will not train on it,
+                              // and will evaluate the loss and any model metrics on this data at the end of each epoch
+        callbacks: {
+            //
+            onTrainBegin: function (logs) {
+                                    t0 = getCurrentTime();
+                                    console.log ("TRAINING STARTED");
+                                },
+            onTrainEnd:   function (logs) {
+                                    t1 = getCurrentTime();
+                                    let timeElapsed = ((t1 - t0) / 60000).toFixed(2); //in minutes
+                                    console.log (`TRAINING FINISHED in ${timeElapsed} minutes`);
+                                },
+
+            // On end of each epoch and of batch, print epoch number and loss (visual version)
+            // onEpochEnd,
+            // On end of each epoch print epoch number and loss (console version)
+            onEpochEnd: (epoch, log) => console.log(`Epoch ${epoch}: loss = ${log.loss}`),
+
+            onEpochBegin: async function () {
+            }
+        }
+    });
+}
+
+async function testModel(model, testingInputTensor, testingLabelTensor){
+    //Testing the model
+    const lossTensor = model.evaluate(testingInputTensor, testingLabelTensor); // we get a tensor
+    const loss = (await lossTensor.dataSync())[0]; // Get a scalar value
+    console.log(`Testing set loss = ${loss}`);
+
+    //Update status
+    // document.getElementById("testing-status").innerHTML = `Testing set loss: ${loss.toPrecision(5)}`;
 }
 
 async function prepareData (data){
-    // Wrapping these calculations in a tidy will dispose any
-  // intermediate tensors.
 
-  // return tf.tidy(() => {
-        // Step 1. Shuffle the data
-        tf.util.shuffle(data);
+        // console.log(data);
+
+        // Step 1. Shuffle the data and convert dataset to array
+        let dataArray = await data.shuffle(1000).toArray();
+        // await dataArray.forEachAsync(e => console.log(e));
+
+
+        //Use 80% of data for training and 20% for testing
+        let [trainingSet, testingSet] = splitData(dataArray, 0.8);
+        // show(`training=${trainingSet.length} testing=${testingSet.length} sum=${dataArray.length}`);
 
         // Step 2. Convert data to Tensor after separating ys form xs
         // See comments.txt [3]
-        const inputs = await data.map(d => d.xs).toArray();
-        const labels = await data.map(d => d.ys).toArray();
+        const trainingInputs = trainingSet.map(d => d.xs);
+        const trainingLabels = trainingSet.map(d => d.ys);
+
+        const testingInputs = testingSet.map(d => d.xs);
+        const testingLabels = testingSet.map(d => d.ys);
+        // const inputs = await data.map(d => d.xs).toArray();
+        // const labels = await data.map(d => d.ys).toArray();
 
         //Normalize fuel before converting to tensor to get rid of string values
-        normalizeFuel(inputs);
+        normalizeFuel(trainingInputs);
+        normalizeFuel(testingInputs);
 
         // See comments.txt [4]
-        let inputTensor = tf.tensor2d(inputs);
+        let trainingInputTensor = tf.tensor2d(trainingInputs);
+        let testingInputTensor = tf.tensor2d(testingInputs);
 
-        let normalizedInputs = tf.tidy(() => normalizeInputs(inputTensor));
-        // normalizedInputs.print();
+        let normalizedTrainingInputs = tf.tidy(() => normalizeInputs(trainingInputTensor));
+        let normalizedTestingInputs = tf.tidy(() => normalizeInputs(testingInputTensor));
+        // normalizedTrainingInputs.print();
+        // return;
 
-        let labelTensor = tf.tensor2d(labels, [labels.length, 1]);
-        let normalizedLabels = normalizeLabels(labelTensor);
-        // normalizedLabels.print();
+        let trainingLabelTensor = tf.tensor2d(trainingLabels, [trainingLabels.length, 1]);
+        let testingLabelTensor = tf.tensor2d(testingLabels, [testingLabels.length, 1]);
+
+        let normalizedTrainingLabels = normalizeLabels(trainingLabelTensor);
+        let normalizedTestingLabels = normalizeLabels(testingLabelTensor);
+        // normalizedTrainingLabels.print();
+
+        trainingInputTensor.dispose();
+        testingInputTensor.dispose();
+        trainingLabelTensor.dispose();
+        testingLabelTensor.dispose();
+
+        return [normalizedTrainingInputs, normalizedTrainingLabels,
+                normalizedTestingInputs, normalizedTestingLabels];
+
+}
 
 
-        return [normalizedLabels, normalizedInputs];
+//Split data into training set and test set according to threshold value
+function splitData(dataArray, threshold){
+    let rows = dataArray.length;
+    let trainRows = Math.floor(rows * threshold);
+    let trainingSet = dataArray.slice(0, trainRows);
+    let testingSet = dataArray.slice(trainRows);
 
-  // });
+    return [trainingSet, testingSet];
 }
 
 async function getData() {
@@ -130,4 +242,10 @@ function normalizeLabels(labelTensor){
     let normalizedLabelTensor = labelTensor.sub(min_price).div(max_price.sub(min_price)); // (value - min) / (max - min)
 
     return normalizedLabelTensor;
+}
+
+function getCurrentTime(){
+    let d = new Date();
+    let t = d.getTime();
+    return (t);
 }
