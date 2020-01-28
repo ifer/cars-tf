@@ -158,7 +158,7 @@ async function prepareData (data){
 
 
 function createModel() {
-    let learningRate = 0.03;
+    let learningRate = 0.1;
   // Create a sequential model
   const model = tf.sequential();
 
@@ -202,8 +202,8 @@ function trainModel(model, trainingInputTensor, trainingLabelTensor){
 
     //Training method: fit (returns a promise)
     return model.fit (trainingInputTensor, trainingLabelTensor,{
-        batchsize: 32, // Number of samples per gradient update
-        epochs: 500, //larger number of iterations on a non-linear model
+        batchsize: 1000, // Number of samples per gradient update
+        epochs: 200, //larger number of iterations on a non-linear model
         validationSplit: 0.2, // fraction of the training data to be used as validation data.
                               // The model will set apart this fraction of the training data, will not train on it,
                               // and will evaluate the loss and any model metrics on this data at the end of each epoch
