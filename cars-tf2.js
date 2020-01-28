@@ -44,14 +44,14 @@ async function run() {
 
 
     const data = await getData();
-
     // await data.forEachAsync(e => console.log(e));
-
 
     // Convert the data to a form we can use for training.
     let [trainingInputs, trainingLabels, testingInputs, testingLabels] = await prepareData (data);
-    // inputs.print();
-    // labels.print();
+    // trainingInputs.print();
+    // trainingLabels.print();
+
+
     let model = createModel();
     model.summary();
     //
@@ -68,17 +68,23 @@ async function run() {
 async function getData() {
     let csvConfig = {
         hasHeader: true,
+        configuredColumnsOnly: true,
         columnConfigs: {
             price: {
-                isLabel: true
+                isLabel: true,
+                required: true
+            },
+            km: {
+                required: true
+            },
+            age: {
+                required: true
             }
         }
     };
 
     //See comments.txt [1]
-    let carsData = tf.data.csv(dataFileUrl, csvConfig).filter(car => (car.xs.fuel === 'Diesel' || car.xs.fuel === 'Essence') && car.ys.price > 1000);
-    // await carsData.forEachAsync(e => console.log(e));
-
+    let carsData = tf.data.csv(dataFileUrl, csvConfig).filter(car => ( car.ys.price > 1000));
 
     //See comments.txt [2]
     const flattenedDataset =
@@ -122,10 +128,6 @@ async function prepareData (data){
         // const inputs = await data.map(d => d.xs).toArray();
         // const labels = await data.map(d => d.ys).toArray();
 
-        //Normalize fuel before converting to tensor to get rid of string values
-        normalizeFuel(trainingInputs);
-        normalizeFuel(testingInputs);
-
         // See comments.txt [4]
         let trainingInputTensor = tf.tensor2d(trainingInputs);
         let testingInputTensor = tf.tensor2d(testingInputs);
@@ -156,13 +158,13 @@ async function prepareData (data){
 
 
 function createModel() {
-    let learningRate = 0.05;
+    let learningRate = 0.03;
   // Create a sequential model
   const model = tf.sequential();
 
   // Add a single hidden layer with 10 nodes, expecting 3 inputs and having bias
   model.add(tf.layers.dense({
-      inputShape: [3],
+      inputShape: [2],
       units: 10,
       activation: "sigmoid", // non-linear activation function
       useBias: true
@@ -201,7 +203,7 @@ function trainModel(model, trainingInputTensor, trainingLabelTensor){
     //Training method: fit (returns a promise)
     return model.fit (trainingInputTensor, trainingLabelTensor,{
         batchsize: 32, // Number of samples per gradient update
-        epochs: 50, //larger number of iterations on a non-linear model
+        epochs: 500, //larger number of iterations on a non-linear model
         validationSplit: 0.2, // fraction of the training data to be used as validation data.
                               // The model will set apart this fraction of the training data, will not train on it,
                               // and will evaluate the loss and any model metrics on this data at the end of each epoch
@@ -236,21 +238,15 @@ async function testModel(model, testingInputTensor, testingLabelTensor){
     console.log(`Testing set loss = ${loss}`);
 }
 
-async function predict(model, km, fuel, age){
+async function predict(model, km, age){
     if (isNaN(km) || isNaN(age)){
         console.log("Error: kilometers and age must be valid numbers");
         return null;
     }
-    if (!(typeof fuel == 'string')){
-        console.log("Error: fuel must be a string");
-        return null;
-    }
-    if (fuel != 'Essence' && fuel != 'Diesel' ){
-        console.log("Error: fuel must be either 'Essence' or 'Diesel'");
-        return null;
-    }
 
-    let inputTensor = tf.tensor2d([[km, normalizeFuel(fuel), age]]);
+
+
+    let inputTensor = tf.tensor2d([[km,  age]]);
     //Needs to be normalized because so is model data
     let normalizedInput = normalizeInputs(inputTensor);
     // normalizedInput.print();
@@ -271,22 +267,22 @@ async function predict(model, km, fuel, age){
 
 async function runPredictions(model){
     let features = [
-        {km: 9000, fuel:'Essence', age:1, target:32180},
-        {km:100000, fuel:'Essence', age:5, target:16689},
-        {km:50000, fuel:'Diesel', age:1, target: 21838},
-        {km:1500, fuel:'Diesel', age:1, target:31352},
-        {km:150000, fuel:'Diesel', age:10, target:8919},
-        {km:200000, fuel:'Essence', age:10, target:6236},
-        {km:200000, fuel:'Diesel', age:12, target:6327},
-        {km:168000, fuel:'Diesel', age:5, target:11654},
+        {km: 9000,   age:1, target:32180},
+        {km:100000,  age:5, target:16689},
+        {km:50000,   age:1, target: 21838},
+        {km:1500,    age:1, target:31352},
+        {km:150000,  age:10, target:8919},
+        {km:200000,  age:10, target:6236},
+        {km:200000,  age:12, target:6327},
+        {km:168000,  age:5, target:11654},
     ];
 
     for (let i=0; i<features.length; i++){
         //predPrice is an object
-        let predPrice = await predict (model, features[i].km, features[i].fuel,  features[i].age);
+        let predPrice = await predict (model, features[i].km,   features[i].age);
         let price = predPrice["0"];
         let diffrate = ((price - features[i].target)*100/features[i].target).toFixed(3);
-        show(`km=${features[i].km}, fuel=${features[i].fuel}, age=${features[i].age}, predicted price: ${price.toFixed(0)}, target: ${features[i].target} diff: ${diffrate}%`);
+        show(`km=${features[i].km}, age=${features[i].age}, predicted price: ${price.toFixed(0)}, target: ${features[i].target} diff: ${diffrate}%`);
     }
 }
 
@@ -305,24 +301,11 @@ function splitData(dataArray, threshold){
 
 
 
-function normalizeFuel(value){
-    if (Array.isArray(value)){
-        value.map((x) => {x[1] = (x[1] == 'Diesel')? -1 : 1});
-    }
-    else {
-        return (value == 'Diesel' ? -1 : 1);
-    }
-}
 
-function deNormalizeFuel(value){
-    // console.log(`value=${value}`);
-    return ((value == 1) ? 'Essence' : 'Diesel');
-}
 
 function normalizeInputs(inputTensor, mode=null){
     // Split into 3 separate tensors - one of each input feature
-    let [km, fuel, age] = tf.split(inputTensor, 3, 1); // split on axis=1 i.e. vertically
-// console.log(`INPUT: ${km} ${fuel} ${age}`);
+    let [km, age] = tf.split(inputTensor, 2, 1); // split on axis=1 i.e. vertically
     //Find min and max of 1st and 3rd tensors (before training only)
     if (mode == 'training'){
         metadata.max_km =  km.max();
@@ -338,7 +321,7 @@ function normalizeInputs(inputTensor, mode=null){
     let normalizedAge = age.sub(metadata.min_age).div(metadata.max_age.sub(metadata.min_age)); // (value - min) / (max - min)
 
     //Concatenate again the three tensors according to dimension 1 ("vertically")
-    let normalizedInputTensor = tf.concat([normalizedKm, fuel, normalizedAge ], 1);
+    let normalizedInputTensor = tf.concat([normalizedKm, normalizedAge ], 1);
 
     // normalizedInputTensor.print();
     return normalizedInputTensor;

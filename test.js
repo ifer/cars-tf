@@ -5,3 +5,5 @@ const tools = require('./tools.js');
 const log = tools.log;
 const show = tools.show;
 const showtable = tools.showtable;
+
+tf.scalar(3.14).print();
